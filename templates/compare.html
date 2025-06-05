@@ -1,0 +1,371 @@
+<!-- templates/compare.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Schema Comparison Results</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <style>
+    .diff-highlight { background-color: #ffebcc; }
+    .missing { background-color: #f8d7da; }
+    .extra { background-color: #d1e7dd; }
+    .diff-highlight { background-color: #ffebcc; }
+    .missing { background-color: #f8d7da; }
+    .extra { background-color: #d1e7dd; }
+    .card-body {
+      padding: 0;
+      /* Remove default padding to align table and scrollbars correctly */
+    }
+
+    .diff-scroll-table-wrapper {
+      width: 100vw;      /* Force table wrapper to viewport width */
+      max-width: 100vw;  /* Ensure no larger than viewport */
+      overflow-x: auto;
+      margin-bottom: 1rem;
+    }
+
+    .diff-scroll-table-wrapper table {
+      min-width: 700px;
+      width: max-content;   /* Table uses as much width as it needs, scrolls if needed */
+      margin-bottom: 0;
+    }
+
+  </style>
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <h1 class="mb-4">Schema Comparison</h1>
+
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <h5>Database 1:</h5>
+        <ul>
+          <li>Host: {{ db1_info.host }}:{{ db1_info.port }}</li>
+          <li>DB Name: {{ db1_info.database }}</li>
+          <li>User: {{ db1_info.user }}</li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <h5>Database 2:</h5>
+        <ul>
+          <li>Host: {{ db2_info.host }}:{{ db2_info.port }}</li>
+          <li>DB Name: {{ db2_info.database }}</li>
+          <li>User: {{ db2_info.user }}</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 1. Tables only in one DB -->
+    <div class="mb-4">
+      <h3>Tables Present Only in One Database</h3>
+      <div class="row">
+        <div class="col-md-6">
+          <h5>Only in DB1:</h5>
+          {% if diff.tables_only_in_db1 %}
+            <ul class="list-group">
+              {% for t in diff.tables_only_in_db1 %}
+                <li class="list-group-item missing">{{ t }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p><em>None</em></p>
+          {% endif %}
+        </div>
+        <div class="col-md-6">
+          <h5>Only in DB2:</h5>
+          {% if diff.tables_only_in_db2 %}
+            <ul class="list-group">
+              {% for t in diff.tables_only_in_db2 %}
+                <li class="list-group-item missing">{{ t }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p><em>None</em></p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Tables in both: show diffs -->
+    <div class="mb-5">
+      <h3>Tables in Both Databases</h3>
+      {% if diff.tables_in_both %}
+        {% for tbl, info in diff.tables_in_both.items() %}
+          <div class="card mb-4">
+            <div class="card-header bg-secondary text-white">
+              {{ tbl }}
+            </div>
+            <div class="card-body">
+              <!-- Columns -->
+              <h5>Columns:</h5>
+              <div class="row">
+                <div class="col-md-4">
+                  <strong>Only in DB1:</strong>
+                  {% if info.columns_only_in_db1 %}
+                    <ul class="list-group">
+                      {% for col in info.columns_only_in_db1 %}
+                        <li class="list-group-item missing">{{ col }}</li>
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <p><em>None</em></p>
+                  {% endif %}
+                </div>
+                <div class="col-md-4">
+                  <strong>Only in DB2:</strong>
+                  {% if info.columns_only_in_db2 %}
+                    <ul class="list-group">
+                      {% for col in info.columns_only_in_db2 %}
+                        <li class="list-group-item missing">{{ col }}</li>
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <p><em>None</em></p>
+                  {% endif %}
+                </div>
+              </div>
+              <!-- Wide table for columns diff -->
+              <div class="mt-3">
+                <strong>In Both (highlight mismatches):</strong>
+                {% if info.columns_in_both %}
+                  <div class="diff-scroll-table-wrapper">
+                    <table class="table table-sm">
+                      <thead>
+                        <tr>
+                          <th>Column</th>
+                          <th>DB1 Definition</th>
+                          <th>DB2 Definition</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for col, cinfo in info.columns_in_both.items() %}
+                          <tr{% if cinfo.diff %} class="diff-highlight"{% endif %}>
+                            <td>{{ col }}</td>
+                            <td>
+                              {{ cinfo.db1.data_type }}
+                              {% if cinfo.db1.is_nullable == 'NO' %} NOT NULL{% endif %}
+                              {% if cinfo.db1.column_default %} DEFAULT {{ cinfo.db1.column_default }}{% endif %}
+                              {% if cinfo.db1.character_maximum_length %}
+                                (len={{ cinfo.db1.character_maximum_length }})
+                              {% endif %}
+                              {% if cinfo.db1.numeric_precision %}
+                                (prec={{ cinfo.db1.numeric_precision }}, scale={{ cinfo.db1.numeric_scale }})
+                              {% endif %}
+                            </td>
+                            <td>
+                              {{ cinfo.db2.data_type }}
+                              {% if cinfo.db2.is_nullable == 'NO' %} NOT NULL{% endif %}
+                              {% if cinfo.db2.column_default %} DEFAULT {{ cinfo.db2.column_default }}{% endif %}
+                              {% if cinfo.db2.character_maximum_length %}
+                                (len={{ cinfo.db2.character_maximum_length }})
+                              {% endif %}
+                              {% if cinfo.db2.numeric_precision %}
+                                (prec={{ cinfo.db2.numeric_precision }}, scale={{ cinfo.db2.numeric_scale }})
+                              {% endif %}
+                            </td>
+                          </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                {% else %}
+                  <p><em>No columns present in both (unexpected).</em></p>
+                {% endif %}
+              </div>
+
+              <hr />
+
+              <!-- Indexes -->
+              <h5>Indexes:</h5>
+              <div class="row">
+                <div class="col-md-4">
+                  <strong>Only in DB1:</strong>
+                  {% if info.indexes_only_in_db1 %}
+                    <ul class="list-group">
+                      {% for idx in info.indexes_only_in_db1 %}
+                        <li class="list-group-item missing">{{ idx }}</li>
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <p><em>None</em></p>
+                  {% endif %}
+                </div>
+                <div class="col-md-4">
+                  <strong>Only in DB2:</strong>
+                  {% if info.indexes_only_in_db2 %}
+                    <ul class="list-group">
+                      {% for idx in info.indexes_only_in_db2 %}
+                        <li class="list-group-item missing">{{ idx }}</li>
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <p><em>None</em></p>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="mt-3">
+                <strong>In Both:</strong>
+                {% if info.indexes_in_both %}
+                  <div class="diff-scroll-table-wrapper">
+                    <table class="table table-sm">
+                      <thead>
+                        <tr>
+                          <th>Index</th>
+                          <th>DB1 Definition</th>
+                          <th>DB2 Definition</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for idx, iinfo in info.indexes_in_both.items() %}
+                          <tr{% if iinfo.diff %} class="diff-highlight"{% endif %}>
+                            <td>{{ idx }}</td>
+                            <td><code>{{ iinfo.db1.index_def }}</code></td>
+                            <td><code>{{ iinfo.db2.index_def }}</code></td>
+                          </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                {% else %}
+                  <p><em>No common indexes.</em></p>
+                {% endif %}
+              </div>
+
+              <hr />
+
+              <!-- Foreign Keys -->
+              <h5>Foreign Keys:</h5>
+              <div class="row">
+                <div class="col-md-4">
+                  <strong>Only in DB1:</strong>
+                  {% if info.fks_only_in_db1 %}
+                    <ul class="list-group">
+                      {% for fk in info.fks_only_in_db1 %}
+                        <li class="list-group-item missing">{{ fk }}</li>
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <p><em>None</em></p>
+                  {% endif %}
+                </div>
+                <div class="col-md-4">
+                  <strong>Only in DB2:</strong>
+                  {% if info.fks_only_in_db2 %}
+                    <ul class="list-group">
+                      {% for fk in info.fks_only_in_db2 %}
+                        <li class="list-group-item missing">{{ fk }}</li>
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <p><em>None</em></p>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="mt-3">
+                <strong>In Both:</strong>
+                {% if info.fks_in_both %}
+                  <div style="overflow-x:auto;">
+                    <table class="table table-sm" style="min-width:900px;">
+                      <thead>
+                        <tr>
+                          <th>Constraint</th>
+                          <th>DB1 Reference</th>
+                          <th>DB2 Reference</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for fk, finfo in info.fks_in_both.items() %}
+                          <tr{% if finfo.diff %} class="diff-highlight"{% endif %}>
+                            <td>{{ fk }}</td>
+                            <td>
+                              ({{ finfo.db1.columns | join(', ') }}) → {{ finfo.db1.referenced_table }}
+                              ({{ finfo.db1.referenced_columns | join(', ') }})
+                            </td>
+                            <td>
+                              ({{ finfo.db2.columns | join(', ') }}) → {{ finfo.db2.referenced_table }}
+                              ({{ finfo.db2.referenced_columns | join(', ') }})
+                            </td>
+                          </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                {% else %}
+                  <p><em>No common foreign keys.</em></p>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p><em>No common tables found.</em></p>
+      {% endif %}
+    </div>
+
+    <hr />
+
+    <!-- 3. ENUM types -->
+    <div class="mb-5">
+      <h3>ENUM Types</h3>
+      <div class="row">
+        <div class="col-md-4">
+          <strong>Only in DB1:</strong>
+          {% if diff.enums_only_in_db1 %}
+            <ul class="list-group">
+              {% for e in diff.enums_only_in_db1 %}
+                <li class="list-group-item missing">{{ e }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p><em>None</em></p>
+          {% endif %}
+        </div>
+        <div class="col-md-4">
+          <strong>Only in DB2:</strong>
+          {% if diff.enums_only_in_db2 %}
+            <ul class="list-group">
+              {% for e in diff.enums_only_in_db2 %}
+                <li class="list-group-item missing">{{ e }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p><em>None</em></p>
+          {% endif %}
+        </div>
+        <div class="col-md-4">
+          <strong>In Both:</strong>
+          {% if diff.enums_in_both %}
+            <div style="overflow-x:auto;">
+              <table class="table table-sm" style="min-width:900px;">
+                <thead>
+                  <tr>
+                    <th>ENUM Type</th>
+                    <th>DB1 Values</th>
+                    <th>DB2 Values</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for enum_name, einfo in diff.enums_in_both.items() %}
+                    <tr{% if einfo.diff %} class="diff-highlight"{% endif %}>
+                      <td>{{ enum_name }}</td>
+                      <td>{{ einfo.db1 | join(', ') }}</td>
+                      <td>{{ einfo.db2 | join(', ') }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p><em>No common ENUM types.</em></p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">← Compare Again</a>
+  </div>
+</body>
+</html>
