@@ -1,0 +1,30 @@
+{
+  "local-bbt": {
+    "db1": {
+      "conn_method": "direct",
+      "host": "127.0.0.1",
+      "port": 5432,
+      "database": "dynamic_law",
+      "user": "jodeqa",
+      "password": "@2103191108030702ff#DD",
+      "ssh_host": "",
+      "ssh_port": 22,
+      "ssh_user": "",
+      "ssh_pass": "",
+      "ssh_pkey": ""
+    },
+    "db2": {
+      "conn_method": "ssh",
+      "host": "localhost",
+      "port": 5432,
+      "database": "dynamic_law",
+      "user": "jodeqa",
+      "password": "@2103191108030702ff#DD",
+      "ssh_host": "103.135.74.146",
+      "ssh_port": 6622,
+      "ssh_user": "vendor",
+      "ssh_pass": "Equiejae9e#",
+      "ssh_pkey": ""
+    }
+  }
+}
