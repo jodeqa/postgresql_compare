@@ -1,7 +1,7 @@
 import os
 import json
 
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from sshtunnel import SSHTunnelForwarder
@@ -145,7 +145,12 @@ def fetch_indexes(conn):
         ix.indisunique AS is_unique,
         ix.indisprimary AS is_primary,
         am.amname AS index_type,
-        pg_get_indexdef(ix.indexrelid) AS index_def
+        pg_get_indexdef(ix.indexrelid) AS index_def,
+        ARRAY(
+          SELECT pg_get_indexdef(ix.indexrelid, k + 1, TRUE)
+          FROM generate_subscripts(ix.indkey, 1) AS k
+          ORDER BY k
+        ) AS columns
     FROM
         pg_class t
         JOIN pg_namespace ns ON (t.relnamespace = ns.oid)
@@ -169,7 +174,8 @@ def fetch_indexes(conn):
                 'is_unique': row['is_unique'],
                 'is_primary': row['is_primary'],
                 'index_type': row['index_type'],
-                'index_def': row['index_def']
+                'index_def': row['index_def'],
+                'columns': row['columns']  # <-- new!
             }
     return result
 
@@ -212,6 +218,7 @@ def fetch_foreign_keys(conn):
                 result[src] = {}
             if fk_name not in result[src]:
                 result[src][fk_name] = {
+                    'constraint_name': fk_name,  # <-- ADD THIS LINE
                     'columns': [],
                     'referenced_table': f"{row['foreign_table_schema']}.{row['foreign_table_name']}",
                     'referenced_columns': []
@@ -506,7 +513,7 @@ def index():
             }
 
             # Overwrite or create a new entry:
-            all_configs[config_name] = { 'db1': db1, 'db2': db2 }
+            all_configs[config_name] = {'db1': db1, 'db2': db2}
             try:
                 save_configs(all_configs)
                 flash(f"Configuration '{config_name}' saved successfully.", "success")
@@ -546,28 +553,28 @@ def index():
             db2_saved = cfg['db2']
 
             defaults['db1_conn_method'] = db1_saved.get('conn_method', 'direct')
-            defaults['db1_host']        = db1_saved.get('host', '')
-            defaults['db1_port']        = db1_saved.get('port', 5432)
-            defaults['db1_name']        = db1_saved.get('database', '')
-            defaults['db1_user']        = db1_saved.get('user', '')
-            defaults['db1_pass']        = db1_saved.get('password', '')
-            defaults['db1_ssh_host']    = db1_saved.get('ssh_host', '')
-            defaults['db1_ssh_port']    = db1_saved.get('ssh_port', 22)
-            defaults['db1_ssh_user']    = db1_saved.get('ssh_user', '')
-            defaults['db1_ssh_pass']    = db1_saved.get('ssh_pass', '')
-            defaults['db1_ssh_pkey']    = db1_saved.get('ssh_pkey', '')
+            defaults['db1_host'] = db1_saved.get('host', '')
+            defaults['db1_port'] = db1_saved.get('port', 5432)
+            defaults['db1_name'] = db1_saved.get('database', '')
+            defaults['db1_user'] = db1_saved.get('user', '')
+            defaults['db1_pass'] = db1_saved.get('password', '')
+            defaults['db1_ssh_host'] = db1_saved.get('ssh_host', '')
+            defaults['db1_ssh_port'] = db1_saved.get('ssh_port', 22)
+            defaults['db1_ssh_user'] = db1_saved.get('ssh_user', '')
+            defaults['db1_ssh_pass'] = db1_saved.get('ssh_pass', '')
+            defaults['db1_ssh_pkey'] = db1_saved.get('ssh_pkey', '')
 
             defaults['db2_conn_method'] = db2_saved.get('conn_method', 'direct')
-            defaults['db2_host']        = db2_saved.get('host', '')
-            defaults['db2_port']        = db2_saved.get('port', 5432)
-            defaults['db2_name']        = db2_saved.get('database', '')
-            defaults['db2_user']        = db2_saved.get('user', '')
-            defaults['db2_pass']        = db2_saved.get('password', '')
-            defaults['db2_ssh_host']    = db2_saved.get('ssh_host', '')
-            defaults['db2_ssh_port']    = db2_saved.get('ssh_port', 22)
-            defaults['db2_ssh_user']    = db2_saved.get('ssh_user', '')
-            defaults['db2_ssh_pass']    = db2_saved.get('ssh_pass', '')
-            defaults['db2_ssh_pkey']    = db2_saved.get('ssh_pkey', '')
+            defaults['db2_host'] = db2_saved.get('host', '')
+            defaults['db2_port'] = db2_saved.get('port', 5432)
+            defaults['db2_name'] = db2_saved.get('database', '')
+            defaults['db2_user'] = db2_saved.get('user', '')
+            defaults['db2_pass'] = db2_saved.get('password', '')
+            defaults['db2_ssh_host'] = db2_saved.get('ssh_host', '')
+            defaults['db2_ssh_port'] = db2_saved.get('ssh_port', 22)
+            defaults['db2_ssh_user'] = db2_saved.get('ssh_user', '')
+            defaults['db2_ssh_pass'] = db2_saved.get('ssh_pass', '')
+            defaults['db2_ssh_pkey'] = db2_saved.get('ssh_pkey', '')
 
             defaults['selected_config'] = to_load
             defaults['config_name'] = to_load
@@ -633,7 +640,9 @@ def index():
             return render_template('compare.html',
                                    db1_info=db1,
                                    db2_info=db2,
-                                   diff=diff)
+                                   diff=diff,
+                                   db1_schema=schema1,
+                                   db2_schema=schema2)
 
         else:
             # Unknown action, just re-render form
@@ -654,28 +663,28 @@ def index():
             db2_saved = cfg['db2']
 
             defaults['db1_conn_method'] = db1_saved.get('conn_method', 'direct')
-            defaults['db1_host']        = db1_saved.get('host', '')
-            defaults['db1_port']        = db1_saved.get('port', 5432)
-            defaults['db1_name']        = db1_saved.get('database', '')
-            defaults['db1_user']        = db1_saved.get('user', '')
-            defaults['db1_pass']        = db1_saved.get('password', '')
-            defaults['db1_ssh_host']    = db1_saved.get('ssh_host', '')
-            defaults['db1_ssh_port']    = db1_saved.get('ssh_port', 22)
-            defaults['db1_ssh_user']    = db1_saved.get('ssh_user', '')
-            defaults['db1_ssh_pass']    = db1_saved.get('ssh_pass', '')
-            defaults['db1_ssh_pkey']    = db1_saved.get('ssh_pkey', '')
+            defaults['db1_host'] = db1_saved.get('host', '')
+            defaults['db1_port'] = db1_saved.get('port', 5432)
+            defaults['db1_name'] = db1_saved.get('database', '')
+            defaults['db1_user'] = db1_saved.get('user', '')
+            defaults['db1_pass'] = db1_saved.get('password', '')
+            defaults['db1_ssh_host'] = db1_saved.get('ssh_host', '')
+            defaults['db1_ssh_port'] = db1_saved.get('ssh_port', 22)
+            defaults['db1_ssh_user'] = db1_saved.get('ssh_user', '')
+            defaults['db1_ssh_pass'] = db1_saved.get('ssh_pass', '')
+            defaults['db1_ssh_pkey'] = db1_saved.get('ssh_pkey', '')
 
             defaults['db2_conn_method'] = db2_saved.get('conn_method', 'direct')
-            defaults['db2_host']        = db2_saved.get('host', '')
-            defaults['db2_port']        = db2_saved.get('port', 5432)
-            defaults['db2_name']        = db2_saved.get('database', '')
-            defaults['db2_user']        = db2_saved.get('user', '')
-            defaults['db2_pass']        = db2_saved.get('password', '')
-            defaults['db2_ssh_host']    = db2_saved.get('ssh_host', '')
-            defaults['db2_ssh_port']    = db2_saved.get('ssh_port', 22)
-            defaults['db2_ssh_user']    = db2_saved.get('ssh_user', '')
-            defaults['db2_ssh_pass']    = db2_saved.get('ssh_pass', '')
-            defaults['db2_ssh_pkey']    = db2_saved.get('ssh_pkey', '')
+            defaults['db2_host'] = db2_saved.get('host', '')
+            defaults['db2_port'] = db2_saved.get('port', 5432)
+            defaults['db2_name'] = db2_saved.get('database', '')
+            defaults['db2_user'] = db2_saved.get('user', '')
+            defaults['db2_pass'] = db2_saved.get('password', '')
+            defaults['db2_ssh_host'] = db2_saved.get('ssh_host', '')
+            defaults['db2_ssh_port'] = db2_saved.get('ssh_port', 22)
+            defaults['db2_ssh_user'] = db2_saved.get('ssh_user', '')
+            defaults['db2_ssh_pass'] = db2_saved.get('ssh_pass', '')
+            defaults['db2_ssh_pkey'] = db2_saved.get('ssh_pkey', '')
 
             defaults['selected_config'] = selected
             defaults['config_name'] = selected
@@ -685,6 +694,180 @@ def index():
         return render_template('index.html',
                                config_names=config_names,
                                defaults=defaults)
+
+
+def generate_sql_for_direction(diff, from_db, to_db, db1_info=None, db2_info=None, db1_schema=None, db2_schema=None):
+    stmts = []
+    from_schema = db1_schema if from_db == "db1" else db2_schema
+    to_schema = db2_schema if from_db == "db1" else db1_schema
+
+    # Create missing tables in 'to_db'
+    for tbl in diff.get(f"tables_only_in_{from_db}", []):
+        table_info = get_table_info(from_schema, tbl)
+        stmts.append(get_create_table_sql(tbl, table_info))
+
+    # Add missing columns to existing tables in 'to_db'
+    for tbl, info in diff.get("tables_in_both", {}).items():
+        for col in info.get(f"columns_only_in_{from_db}", []):
+            col_info = get_column_info(from_schema, tbl, col)
+            stmts.append(get_add_column_sql(tbl, col, col_info))
+
+    # Add missing indexes
+    for tbl, info in diff.get("tables_in_both", {}).items():
+        for idx in info.get(f"indexes_only_in_{from_db}", []):
+            idx_info = get_index_info(from_schema, tbl, idx)
+            stmts.append(get_create_index_sql(idx, idx_info, tbl))
+
+    # Add missing foreign keys
+    for tbl, info in diff.get("tables_in_both", {}).items():
+        for fk in info.get(f"fks_only_in_{from_db}", []):
+            fk_info = get_fk_info(from_schema, tbl, fk)
+            stmts.append(get_add_fk_sql(tbl, fk_info))
+
+    # Create missing enums
+    for enum in diff.get(f"enums_only_in_{from_db}", []):
+        enum_values = get_enum_values(from_schema, enum)
+        stmts.append(get_create_enum_sql(enum, enum_values))
+
+    # Add missing enum values
+    for enum, einfo in diff.get("enums_in_both", {}).items():
+        vals_from = set(einfo[from_db])
+        vals_to = set(einfo[to_db])
+        missing = vals_from - vals_to
+        for v in missing:
+            stmts.append(get_add_enum_value_sql(enum, v))
+
+    return "\n".join(stmts) if stmts else "-- No changes needed"
+
+
+@app.route('/generate_sql_diff', methods=['POST'])
+def generate_sql_diff():
+    """
+    Generate SQL statements to sync schemas in the selected direction.
+    Expects JSON: { "direction": "db1_to_db2", "diff": {...} }
+    Returns: { "sql": "..." }
+    """
+    data = request.json
+    direction = data.get('direction')
+    diff = data.get('diff')
+
+    db1_info = data.get('db1_info')
+    db2_info = data.get('db2_info')
+    db1_schema = data.get('db1_schema')
+    db2_schema = data.get('db2_schema')
+
+    # Here you would call your function to generate SQL based on direction and diff
+    if direction == 'db1_to_db2':
+        sql = generate_sql_for_direction(
+            diff, from_db='db1', to_db='db2',
+            db1_info=db1_info, db2_info=db2_info,
+            db1_schema=db1_schema, db2_schema=db2_schema
+        )
+    elif direction == 'db2_to_db1':
+        sql = generate_sql_for_direction(
+            diff, from_db='db2', to_db='db1',
+            db1_info=db1_info, db2_info=db2_info,
+            db1_schema=db1_schema, db2_schema=db2_schema
+        )
+    else:
+        return jsonify({'sql': '-- Invalid direction'}), 400
+
+    return jsonify({"sql": sql})
+
+
+def get_create_table_sql(table_name, table_info):
+    """
+    table_info: dict with keys 'columns', 'primary_key', 'foreign_keys'
+    """
+    lines = []
+    for col_name, col in table_info['columns'].items():
+        # Compose the column DDL
+        line = f'"{col_name}" {col["data_type"]}'
+        if col.get("character_maximum_length"):
+            line += f'({col["character_maximum_length"]})'
+        if col.get("numeric_precision") and col.get("numeric_scale") is not None:
+            line += f'({col["numeric_precision"]},{col["numeric_scale"]})'
+        if col["is_nullable"] == "NO":
+            line += " NOT NULL"
+        if col.get("column_default"):
+            line += f' DEFAULT {col["column_default"]}'
+        lines.append(line)
+    # Add primary key constraint
+    if table_info.get("primary_key"):
+        pk = ', '.join(f'"{k}"' for k in table_info["primary_key"])
+        lines.append(f'PRIMARY KEY ({pk})')
+    # Add foreign keys
+    for fk in table_info.get("foreign_keys", []):
+        col_list = ', '.join(f'"{c}"' for c in fk["columns"])
+        ref_col_list = ', '.join(f'"{c}"' for c in fk["referenced_columns"])
+        lines.append(
+            f'FOREIGN KEY ({col_list}) REFERENCES "{fk["referenced_table"]}" ({ref_col_list})'
+        )
+    columns_sql = ',\n  '.join(lines)
+    return f'CREATE TABLE "{table_name}" (\n  {columns_sql}\n);'
+
+
+def get_add_column_sql(table_name, col_name, col):
+    line = f'ALTER TABLE "{table_name}" ADD COLUMN "{col_name}" {col["data_type"]}'
+    if col.get("character_maximum_length"):
+        line += f'({col["character_maximum_length"]})'
+    if col.get("numeric_precision") and col.get("numeric_scale") is not None:
+        line += f'({col["numeric_precision"]},{col["numeric_scale"]})'
+    if col["is_nullable"] == "NO":
+        line += " NOT NULL"
+    if col.get("column_default"):
+        line += f' DEFAULT {col["column_default"]}'
+    return line + ";"
+
+
+def get_create_index_sql(index_name, index_info, table_name):
+    unique = "UNIQUE " if index_info.get("is_unique") else ""
+    cols = ', '.join(f'"{c}"' for c in index_info["columns"])
+    return f'CREATE {unique}INDEX "{index_name}" ON "{table_name}" ({cols});'
+
+
+def get_add_fk_sql(table_name, fk):
+    col_list = ', '.join(f'"{c}"' for c in fk["columns"])
+    ref_col_list = ', '.join(f'"{c}"' for c in fk["referenced_columns"])
+    return (
+        f'ALTER TABLE "{table_name}" ADD CONSTRAINT "{fk["constraint_name"]}" '
+        f'FOREIGN KEY ({col_list}) REFERENCES "{fk["referenced_table"]}" ({ref_col_list});'
+    )
+
+
+def get_create_enum_sql(enum_name, enum_values):
+    vals = ', '.join(f"'{v}'" for v in enum_values)
+    return f'CREATE TYPE "{enum_name}" AS ENUM ({vals});'
+
+
+def get_table_info(schema, table_name):
+    """Return the full table info for table_name from given schema dict."""
+    return schema['tables'].get(table_name, {})
+
+
+def get_column_info(schema, table_name, col_name):
+    """Return the column definition for col_name in table_name from schema dict."""
+    table = schema['tables'].get(table_name, {})
+    return table.get('columns', {}).get(col_name, {})
+
+
+def get_index_info(schema, table_name, index_name):
+    """Return the index definition for index_name in table_name from schema dict."""
+    return schema['indexes'].get(table_name, {}).get(index_name, {})
+
+
+def get_fk_info(schema, table_name, fk_name):
+    """Return the FK definition for fk_name in table_name from schema dict."""
+    return schema['fks'].get(table_name, {}).get(fk_name, {})
+
+
+def get_enum_values(schema, enum_name):
+    """Return the values for the enum type from schema dict."""
+    return schema['enums'].get(enum_name, [])
+
+
+def get_add_enum_value_sql(enum_name, value):
+    return f"ALTER TYPE \"{enum_name}\" ADD VALUE IF NOT EXISTS '{value}';"
 
 
 if __name__ == '__main__':

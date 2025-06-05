@@ -3,6 +3,7 @@
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+
 def get_pg_connection(host, port, database, user, password):
     """
     Return a new psycopg2 connection using RealDictCursor for easy dict results.

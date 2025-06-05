@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Schema Comparison Results</title>
+  <!-- DataTables CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css"/>
+  <style>
+    body { font-family: Segoe UI, Arial, sans-serif; background: #f8f9fa; }
+    .diff-highlight { background: #ffebcc !important; }
+    .missing { background: #f8d7da !important; }
+    .extra { background: #d1e7dd !important; }
+    h1 { margin-top: 32px; }
+    .section { margin-bottom: 2em; }
+    .sidebox { display: inline-block; width: 45%; vertical-align: top; margin-right: 3%; }
+    .sidebox ul { margin: 0 0 1em 0; padding: 0; list-style: none; }
+    .sidebox li { margin-bottom: 4px; padding: 4px 8px; border-radius: 3px; }
+    .list-header { font-weight: bold; margin-bottom: 0.25em; }
+    .datatable-section { margin-top: 1.5em; }
+    .datatable-wrapper { overflow-x: auto; }
+    /* DataTables will handle horizontal scroll on its own */
+  </style>
+</head>
+<body>
+  <h1>Schema Comparison</h1>
+
+  <!-- 1. DB Info -->
+  <div class="section">
+    <div class="sidebox">
+      <div class="list-header">Database 1</div>
+      <ul>
+        <li>Host: {{ db1_info.host }}:{{ db1_info.port }}</li>
+        <li>DB Name: {{ db1_info.database }}</li>
+        <li>User: {{ db1_info.user }}</li>
+      </ul>
+    </div>
+    <div class="sidebox">
+      <div class="list-header">Database 2</div>
+      <ul>
+        <li>Host: {{ db2_info.host }}:{{ db2_info.port }}</li>
+        <li>DB Name: {{ db2_info.database }}</li>
+        <li>User: {{ db2_info.user }}</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 2. Tables present only in one DB -->
+  <div class="section">
+    <h2>Tables Present Only in One Database</h2>
+    <div class="sidebox">
+      <div class="list-header">Only in DB1</div>
+      {% if diff.tables_only_in_db1 %}
+        <ul>
+        {% for t in diff.tables_only_in_db1 %}
+          <li class="missing">{{ t }}</li>
+        {% endfor %}
+        </ul>
+      {% else %}
+        <em>None</em>
+      {% endif %}
+    </div>
+    <div class="sidebox">
+      <div class="list-header">Only in DB2</div>
+      {% if diff.tables_only_in_db2 %}
+        <ul>
+        {% for t in diff.tables_only_in_db2 %}
+          <li class="missing">{{ t }}</li>
+        {% endfor %}
+        </ul>
+      {% else %}
+        <em>None</em>
+      {% endif %}
+    </div>
+    <div style="clear:both;"></div>
+  </div>
+
+  <!-- 3. Tables in both: show diffs -->
+  <div class="section">
+    <h2>Tables in Both Databases</h2>
+    {% if diff.tables_in_both %}
+      {% for tbl, info in diff.tables_in_both.items() %}
+        <div style="background:#e9ecef; border-radius:8px; margin-bottom:32px; padding:12px;">
+          <h3 style="margin-top:0;">{{ tbl }}</h3>
+          <div class="sidebox">
+            <div class="list-header">Columns Only in DB1</div>
+            {% if info.columns_only_in_db1 %}
+              <ul>
+                {% for col in info.columns_only_in_db1 %}
+                  <li class="missing">{{ col }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <em>None</em>
+            {% endif %}
+            <div class="list-header">Indexes Only in DB1</div>
+            {% if info.indexes_only_in_db1 %}
+              <ul>
+                {% for idx in info.indexes_only_in_db1 %}
+                  <li class="missing">{{ idx }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <em>None</em>
+            {% endif %}
+            <div class="list-header">FKs Only in DB1</div>
+            {% if info.fks_only_in_db1 %}
+              <ul>
+                {% for fk in info.fks_only_in_db1 %}
+                  <li class="missing">{{ fk }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <em>None</em>
+            {% endif %}
+          </div>
+          <div class="sidebox">
+            <div class="list-header">Columns Only in DB2</div>
+            {% if info.columns_only_in_db2 %}
+              <ul>
+                {% for col in info.columns_only_in_db2 %}
+                  <li class="missing">{{ col }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <em>None</em>
+            {% endif %}
+            <div class="list-header">Indexes Only in DB2</div>
+            {% if info.indexes_only_in_db2 %}
+              <ul>
+                {% for idx in info.indexes_only_in_db2 %}
+                  <li class="missing">{{ idx }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <em>None</em>
+            {% endif %}
+            <div class="list-header">FKs Only in DB2</div>
+            {% if info.fks_only_in_db2 %}
+              <ul>
+                {% for fk in info.fks_only_in_db2 %}
+                  <li class="missing">{{ fk }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <em>None</em>
+            {% endif %}
+          </div>
+          <div style="clear:both;"></div>
+
+          <!-- Columns diff table (DataTables!) -->
+          <div class="datatable-section">
+            <strong>Columns in Both (highlight mismatches):</strong>
+            {% if info.columns_in_both %}
+              <div class="datatable-wrapper">
+                <table id="tbl-cols-{{ loop.index }}" class="display">
+                  <thead>
+                    <tr>
+                      <th>Column</th>
+                      <th>DB1 Definition</th>
+                      <th>DB2 Definition</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for col, cinfo in info.columns_in_both.items() %}
+                      <tr{% if cinfo.diff %} class="diff-highlight"{% endif %}>
+                        <td>{{ col }}</td>
+                        <td>
+                          {{ cinfo.db1.data_type }}
+                          {% if cinfo.db1.is_nullable == 'NO' %} NOT NULL{% endif %}
+                          {% if cinfo.db1.column_default %} DEFAULT {{ cinfo.db1.column_default }}{% endif %}
+                          {% if cinfo.db1.character_maximum_length %} (len={{ cinfo.db1.character_maximum_length }}){% endif %}
+                          {% if cinfo.db1.numeric_precision %} (prec={{ cinfo.db1.numeric_precision }}, scale={{ cinfo.db1.numeric_scale }}){% endif %}
+                        </td>
+                        <td>
+                          {{ cinfo.db2.data_type }}
+                          {% if cinfo.db2.is_nullable == 'NO' %} NOT NULL{% endif %}
+                          {% if cinfo.db2.column_default %} DEFAULT {{ cinfo.db2.column_default }}{% endif %}
+                          {% if cinfo.db2.character_maximum_length %} (len={{ cinfo.db2.character_maximum_length }}){% endif %}
+                          {% if cinfo.db2.numeric_precision %} (prec={{ cinfo.db2.numeric_precision }}, scale={{ cinfo.db2.numeric_scale }}){% endif %}
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <em>No columns present in both (unexpected).</em>
+            {% endif %}
+          </div>
+
+          <!-- Indexes diff table (DataTables!) -->
+          <div class="datatable-section">
+            <strong>Indexes in Both:</strong>
+            {% if info.indexes_in_both %}
+              <div class="datatable-wrapper">
+                <table id="tbl-idx-{{ loop.index }}" class="display">
+                  <thead>
+                    <tr>
+                      <th>Index</th>
+                      <th>DB1 Definition</th>
+                      <th>DB2 Definition</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for idx, iinfo in info.indexes_in_both.items() %}
+                      <tr{% if iinfo.diff %} class="diff-highlight"{% endif %}>
+                        <td>{{ idx }}</td>
+                        <td>{{ iinfo.db1.index_def }}</td>
+                        <td>{{ iinfo.db2.index_def }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <em>No common indexes.</em>
+            {% endif %}
+          </div>
+
+          <!-- FKs diff table (DataTables!) -->
+          <div class="datatable-section">
+            <strong>Foreign Keys in Both:</strong>
+            {% if info.fks_in_both %}
+              <div class="datatable-wrapper">
+                <table id="tbl-fk-{{ loop.index }}" class="display">
+                  <thead>
+                    <tr>
+                      <th>Constraint</th>
+                      <th>DB1 Reference</th>
+                      <th>DB2 Reference</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for fk, finfo in info.fks_in_both.items() %}
+                      <tr{% if finfo.diff %} class="diff-highlight"{% endif %}>
+                        <td>{{ fk }}</td>
+                        <td>
+                          ({{ finfo.db1.columns | join(', ') }}) → {{ finfo.db1.referenced_table }} ({{ finfo.db1.referenced_columns | join(', ') }})
+                        </td>
+                        <td>
+                          ({{ finfo.db2.columns | join(', ') }}) → {{ finfo.db2.referenced_table }} ({{ finfo.db2.referenced_columns | join(', ') }})
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <em>No common foreign keys.</em>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <em>No common tables found.</em>
+    {% endif %}
+  </div>
+
+  <!-- ENUM Types section (DataTables) -->
+  <div class="section">
+    <h2>ENUM Types</h2>
+    <div class="sidebox">
+      <div class="list-header">Only in DB1</div>
+      {% if diff.enums_only_in_db1 %}
+        <ul>
+        {% for e in diff.enums_only_in_db1 %}
+          <li class="missing">{{ e }}</li>
+        {% endfor %}
+        </ul>
+      {% else %}
+        <em>None</em>
+      {% endif %}
+    </div>
+    <div class="sidebox">
+      <div class="list-header">Only in DB2</div>
+      {% if diff.enums_only_in_db2 %}
+        <ul>
+        {% for e in diff.enums_only_in_db2 %}
+          <li class="missing">{{ e }}</li>
+        {% endfor %}
+        </ul>
+      {% else %}
+        <em>None</em>
+      {% endif %}
+    </div>
+    <div class="sidebox" style="width:100%;">
+      <div class="list-header">In Both</div>
+      {% if diff.enums_in_both %}
+        <div class="datatable-wrapper">
+          <table id="tbl-enum" class="display">
+            <thead>
+              <tr>
+                <th>ENUM Type</th>
+                <th>DB1 Values</th>
+                <th>DB2 Values</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for enum_name, einfo in diff.enums_in_both.items() %}
+                <tr{% if einfo.diff %} class="diff-highlight"{% endif %}>
+                  <td>{{ enum_name }}</td>
+                  <td>{{ einfo.db1 | join(', ') }}</td>
+                  <td>{{ einfo.db2 | join(', ') }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <em>No common ENUM types.</em>
+      {% endif %}
+    </div>
+    <div style="clear:both;"></div>
+  </div>
+
+  <div class="section">
+    <a href="{{ url_for('index') }}">← Compare Again</a>
+  </div>
+
+  <!-- DataTables and jQuery -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <script>
+    $(function() {
+      // Find all tables with id starting with 'tbl-'
+      $('[id^="tbl-"]').each(function() {
+        $(this).DataTable({
+          paging: false,
+          searching: false,
+          info: false,
+          scrollX: true,
+          ordering: true
+        });
+      });
+    });
+  </script>
+</body>
+</html>

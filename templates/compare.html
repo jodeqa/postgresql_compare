@@ -8,34 +8,78 @@
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
     rel="stylesheet"
   />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
   <style>
     .diff-highlight { background-color: #ffebcc; }
     .missing { background-color: #f8d7da; }
     .extra { background-color: #d1e7dd; }
-    .diff-highlight { background-color: #ffebcc; }
-    .missing { background-color: #f8d7da; }
-    .extra { background-color: #d1e7dd; }
-    .card-body {
-      padding: 0;
-      /* Remove default padding to align table and scrollbars correctly */
+    @media print {
+      body, html {
+        background: #fff !important;
+        color: #111 !important;
+        font-size: 11px;
+      }
+      .container, .row, .col-md-4, .col-md-6, .mb-4, .mb-5, .py-5, .card, .card-header, .card-body {
+        box-shadow: none !important;
+        background: #fff !important;
+        color: #111 !important;
+        border: 1px solid #ccc !important;
+        page-break-inside: avoid !important;
+        margin: 0 !important;
+        padding: 2px 5px !important;
+      }
+      .mb-3, .mb-4, .mb-5, .py-5, .card, .btn, .modal, .modal-backdrop, .modal-footer, .modal-header {
+        box-shadow: none !important;
+        background: transparent !important;
+      }
+      .card {
+        border: 1px solid #ccc !important;
+        page-break-inside: avoid !important;
+        margin-bottom: 10px !important;
+      }
+      .card-header, .card-body {
+        background: #fff !important;
+        color: #111 !important;
+        page-break-inside: avoid;
+      }
+      table, .table, .table-sm {
+        width: 100% !important;
+        font-size: 12px !important;
+        page-break-inside: avoid !important;
+        word-break: break-all;
+      }
+      th, td {
+        border: 1px solid #ccc !important;
+        padding: 3px 6px !important;
+      }
+      .table-responsive {
+        overflow-x: visible !important;
+        -webkit-overflow-scrolling: auto !important;
+      }
+      /* Hide all buttons and non-content controls when printing */
+      .btn, .modal, .modal-backdrop, .modal-footer, .modal-header, #sql-modal, [onclick*="window.print"] {
+        display: none !important;
+      }
+      /* Remove shadows and margins for print clarity */
+      .shadow, .rounded, .border, .list-group-item {
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        border: 1px solid #ccc !important;
+      }
+      /* Always start new table/card on new page if it gets too tall */
+      .card { page-break-inside: avoid; }
     }
-
-    .diff-scroll-table-wrapper {
-      width: 100vw;      /* Force table wrapper to viewport width */
-      max-width: 100vw;  /* Ensure no larger than viewport */
-      overflow-x: auto;
-      margin-bottom: 1rem;
-    }
-
-    .diff-scroll-table-wrapper table {
-      min-width: 700px;
-      width: max-content;   /* Table uses as much width as it needs, scrolls if needed */
-      margin-bottom: 0;
-    }
-
   </style>
+
 </head>
 <body class="bg-light">
+  <div class="mb-3 text-end">
+    <div class="mb-3 text-end">
+      <button class="btn btn-outline-dark" onclick="window.print()">🖨️ Print / Export This Page as PDF</button>
+    </div>
+  </div>
+
   <div class="container py-5">
     <h1 class="mb-4">Schema Comparison</h1>
 
@@ -55,6 +99,31 @@
           <li>DB Name: {{ db2_info.database }}</li>
           <li>User: {{ db2_info.user }}</li>
         </ul>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <button class="btn btn-success me-2" id="btn-db1-to-db2">Apply Difference: DB1 → DB2</button>
+      <button class="btn btn-primary" id="btn-db2-to-db1">Apply Difference: DB2 → DB1</button>
+    </div>
+    <!-- The SQL output modal/area -->
+    <div id="sql-modal" class="modal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="sql-modal-title">Generated SQL</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <textarea id="sql-output" class="form-control" rows="10" readonly></textarea>
+            <!-- Inside the modal-content, after the textarea -->
+            <div class="modal-footer">
+              <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+              <button class="btn btn-dark" onclick="printSQLModal()">Print/Export as PDF</button>
+              <button class="btn btn-success" onclick="downloadSQLAsPDF()">Download as PDF</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -131,7 +200,7 @@
               <div class="mt-3">
                 <strong>In Both (highlight mismatches):</strong>
                 {% if info.columns_in_both %}
-                  <div class="diff-scroll-table-wrapper">
+                  <div class="table-responsive">
                     <table class="table table-sm">
                       <thead>
                         <tr>
@@ -209,7 +278,7 @@
               <div class="mt-3">
                 <strong>In Both:</strong>
                 {% if info.indexes_in_both %}
-                  <div class="diff-scroll-table-wrapper">
+                  <div class="table-responsive">
                     <table class="table table-sm">
                       <thead>
                         <tr>
@@ -267,8 +336,8 @@
               <div class="mt-3">
                 <strong>In Both:</strong>
                 {% if info.fks_in_both %}
-                  <div style="overflow-x:auto;">
-                    <table class="table table-sm" style="min-width:900px;">
+                  <div class="table-responsive">
+                    <table class="table table-sm">
                       <thead>
                         <tr>
                           <th>Constraint</th>
@@ -338,8 +407,8 @@
         <div class="col-md-4">
           <strong>In Both:</strong>
           {% if diff.enums_in_both %}
-            <div style="overflow-x:auto;">
-              <table class="table table-sm" style="min-width:900px;">
+            <div class="table-responsive">
+              <table class="table table-sm">
                 <thead>
                   <tr>
                     <th>ENUM Type</th>
@@ -367,5 +436,98 @@
 
     <a href="{{ url_for('index') }}" class="btn btn-secondary">← Compare Again</a>
   </div>
+
+  <script>
+    window.DIFF_OBJECT = {{ diff | tojson | safe }};
+    window.DB1_INFO = {{ db1_info | tojson | safe }};
+    window.DB2_INFO = {{ db2_info | tojson | safe }};
+    window.DB1_SCHEMA = {{ db1_schema | tojson | safe }};
+    window.DB2_SCHEMA = {{ db2_schema | tojson | safe }};
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+  function showSQLModal(sql, title) {
+    document.getElementById('sql-output').value = sql;
+    document.getElementById('sql-modal-title').textContent = title;
+    // Show Bootstrap 5 modal
+    const modal = new bootstrap.Modal(document.getElementById('sql-modal'));
+    modal.show();
+  }
+
+  async function getSQLDiff(direction) {
+    // POST to your Flask backend
+    const resp = await fetch('/generate_sql_diff', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        direction: direction,
+        diff: window.DIFF_OBJECT,
+        db1_info: window.DB1_INFO,
+        db2_info: window.DB2_INFO,
+        db1_schema: window.DB1_SCHEMA,
+        db2_schema: window.DB2_SCHEMA
+      })
+    });
+    if (!resp.ok) {
+      showSQLModal('-- Error generating SQL: ' + (await resp.text()), 'Error');
+      return;
+    }
+    const data = await resp.json();
+    showSQLModal(data.sql || '-- No SQL generated',
+      direction === 'db1_to_db2'
+        ? 'SQL to Apply Difference: DB1 → DB2'
+        : 'SQL to Apply Difference: DB2 → DB1'
+    );
+  }
+
+  document.getElementById('btn-db1-to-db2').onclick = function() {
+    getSQLDiff('db1_to_db2');
+  };
+  document.getElementById('btn-db2-to-db1').onclick = function() {
+    getSQLDiff('db2_to_db1');
+  };
+
+  function printSQLModal() {
+    const sqlText = document.getElementById('sql-output').value;
+    const w = window.open('', '_blank', 'width=600,height=600');
+    w.document.write(`
+      <html>
+        <head>
+          <title>Generated SQL Migration</title>
+          <style>
+            body { font-family: monospace; margin: 2em; }
+            pre { background: #f4f4f4; border: 1px solid #bbb; padding: 1em; }
+          </style>
+        </head>
+        <body>
+          <h2>Generated SQL Migration</h2>
+          <pre>${sqlText.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+          <script>
+            window.print();
+          <\/script>
+        </body>
+      </html>
+    `);
+    w.document.close();
+  }
+
+  function downloadSQLAsPDF() {
+    const sqlText = document.getElementById('sql-output').value;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(10);
+    doc.text("Generated SQL Migration", 10, 10);
+    doc.setFontSize(8);
+    // Break SQL into lines for page size
+    const lines = doc.splitTextToSize(sqlText, 180);
+    doc.text(lines, 10, 20);
+    doc.save('migration.sql.pdf');
+  }
+  </script>
+
+
 </body>
 </html>
