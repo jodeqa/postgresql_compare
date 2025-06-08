@@ -15,60 +15,18 @@
     .missing { background-color: #f8d7da; }
     .extra { background-color: #d1e7dd; }
     @media print {
-      body, html {
-        background: #fff !important;
-        color: #111 !important;
-        font-size: 11px;
-      }
-      .container, .row, .col-md-4, .col-md-6, .mb-4, .mb-5, .py-5, .card, .card-header, .card-body {
-        box-shadow: none !important;
-        background: #fff !important;
-        color: #111 !important;
-        border: 1px solid #ccc !important;
-        page-break-inside: avoid !important;
-        margin: 0 !important;
-        padding: 2px 5px !important;
-      }
-      .mb-3, .mb-4, .mb-5, .py-5, .card, .btn, .modal, .modal-backdrop, .modal-footer, .modal-header {
-        box-shadow: none !important;
-        background: transparent !important;
-      }
-      .card {
-        border: 1px solid #ccc !important;
-        page-break-inside: avoid !important;
-        margin-bottom: 10px !important;
-      }
-      .card-header, .card-body {
-        background: #fff !important;
-        color: #111 !important;
-        page-break-inside: avoid;
-      }
-      table, .table, .table-sm {
-        width: 100% !important;
-        font-size: 12px !important;
-        page-break-inside: avoid !important;
-        word-break: break-all;
-      }
-      th, td {
-        border: 1px solid #ccc !important;
-        padding: 3px 6px !important;
-      }
-      .table-responsive {
-        overflow-x: visible !important;
-        -webkit-overflow-scrolling: auto !important;
-      }
-      /* Hide all buttons and non-content controls when printing */
-      .btn, .modal, .modal-backdrop, .modal-footer, .modal-header, #sql-modal, [onclick*="window.print"] {
-        display: none !important;
-      }
-      /* Remove shadows and margins for print clarity */
-      .shadow, .rounded, .border, .list-group-item {
-        box-shadow: none !important;
-        border-radius: 0 !important;
-        border: 1px solid #ccc !important;
-      }
-      /* Always start new table/card on new page if it gets too tall */
-      .card { page-break-inside: avoid; }
+      body, html { background: #fff !important; color: #111 !important; font-size: 11px; }
+      .container, .mb-4, .mb-5, .py-5 { box-shadow: none !important; background: #fff !important; color: #111 !important; margin: 0 !important; padding: 2px 5px !important;}
+      .row, .col-md-4, .col-md-6 { padding: 0 !important; margin: 0 !important; min-height: 0 !important; background: none !important; }
+      .card { border: 1px solid #ccc !important; page-break-inside: avoid !important; background: #fff !important; margin-bottom: 10px !important; }
+      .card-header, .card-body { background: #fff !important; color: #111 !important; }
+      th, td { border: 1px solid #ccc !important; padding: 3px 6px !important; background: #fff !important; color: #111 !important; }
+      .table, .table-sm { width: 100% !important; font-size: 12px !important; }
+      .table-responsive { overflow-x: visible !important; }
+      .btn, .modal, .modal-backdrop, .modal-footer, .modal-header, #sql-modal, [onclick*="window.print"] { display: none !important; }
+      .list-group-item { border: 1px solid #ccc !important; background: #fff !important; color: #111 !important; }
+      /* Remove border from .row/.col-* (to prevent big empty boxes) */
+      .row, .col-md-4, .col-md-6 { border: none !important; }
     }
   </style>
 

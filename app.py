@@ -338,26 +338,37 @@ def compare_schemas(schema1, schema2):
         # ---- Columns ----
         c1 = set(schema1['tables'][tbl]['columns'].keys())
         c2 = set(schema2['tables'][tbl]['columns'].keys())
-        block['columns_only_in_db1'] = sorted(list(c1 - c2))
-        block['columns_only_in_db2'] = sorted(list(c2 - c1))
 
+        # missing in each
+        block['columns_only_in_db1'] = [
+            col for col in schema1['tables'][tbl]['columns']
+            if col in (c1 - c2)
+        ]
+        block['columns_only_in_db2'] = [
+            col for col in schema2['tables'][tbl]['columns']
+            if col in (c2 - c1)
+        ]
+
+        # common columns, in original (ordinal) order
+        common = c1 & c2
         cboth = {}
-        for col in sorted(list(c1 & c2)):
-            m1 = schema1['tables'][tbl]['columns'][col]
-            m2 = schema2['tables'][tbl]['columns'][col]
-            same = (
-                m1['data_type'] == m2['data_type'] and
-                m1['is_nullable'] == m2['is_nullable'] and
-                (m1['column_default'] or '').strip() == (m2['column_default'] or '').strip() and
-                m1['character_maximum_length'] == m2['character_maximum_length'] and
-                m1['numeric_precision'] == m2['numeric_precision'] and
-                m1['numeric_scale'] == m2['numeric_scale']
-            )
-            cboth[col] = {
-                'db1': m1,
-                'db2': m2,
-                'diff': not same
-            }
+        for col in schema1['tables'][tbl]['columns'].keys():
+            if col in common:
+                m1 = schema1['tables'][tbl]['columns'][col]
+                m2 = schema2['tables'][tbl]['columns'][col]
+                same = (
+                        m1['data_type'] == m2['data_type'] and
+                        m1['is_nullable'] == m2['is_nullable'] and
+                        (m1['column_default'] or '').strip() == (m2['column_default'] or '').strip() and
+                        m1['character_maximum_length'] == m2['character_maximum_length'] and
+                        m1['numeric_precision'] == m2['numeric_precision'] and
+                        m1['numeric_scale'] == m2['numeric_scale']
+                )
+                cboth[col] = {
+                    'db1': m1,
+                    'db2': m2,
+                    'diff': not same
+                }
         block['columns_in_both'] = cboth
 
         # ---- Indexes ----
@@ -696,6 +707,10 @@ def index():
                                defaults=defaults)
 
 
+def pg_ident(schema, name):
+    return f'{schema}."{name}"'
+
+
 def generate_sql_for_direction(diff, from_db, to_db, db1_info=None, db2_info=None, db1_schema=None, db2_schema=None):
     stmts = []
     from_schema = db1_schema if from_db == "db1" else db2_schema
@@ -779,40 +794,60 @@ def get_create_table_sql(table_name, table_info):
     """
     table_info: dict with keys 'columns', 'primary_key', 'foreign_keys'
     """
+    if '.' in table_name:
+        schema, tbl = table_name.split('.', 1)
+        table_ident = f'{schema}."{tbl}"'
+    else:
+        table_ident = f'"{table_name}"'
     lines = []
     for col_name, col in table_info['columns'].items():
         # Compose the column DDL
-        line = f'"{col_name}" {col["data_type"]}'
-        if col.get("character_maximum_length"):
-            line += f'({col["character_maximum_length"]})'
-        if col.get("numeric_precision") and col.get("numeric_scale") is not None:
-            line += f'({col["numeric_precision"]},{col["numeric_scale"]})'
+        coltype = col["data_type"]
+        if coltype in ("integer", "bigint", "smallint"):
+            typstr = coltype
+        elif col.get("numeric_precision") and col.get("numeric_scale") is not None:
+            typstr = f'numeric({col["numeric_precision"]},{col["numeric_scale"]})'
+        elif col.get("character_maximum_length"):
+            typstr = f'{coltype}({col["character_maximum_length"]})'
+        else:
+            typstr = coltype
+        line = f'"{col_name}" {typstr}'
         if col["is_nullable"] == "NO":
             line += " NOT NULL"
         if col.get("column_default"):
             line += f' DEFAULT {col["column_default"]}'
         lines.append(line)
-    # Add primary key constraint
+    # Primary key
     if table_info.get("primary_key"):
         pk = ', '.join(f'"{k}"' for k in table_info["primary_key"])
         lines.append(f'PRIMARY KEY ({pk})')
-    # Add foreign keys
+    # Foreign keys (optional)
     for fk in table_info.get("foreign_keys", []):
         col_list = ', '.join(f'"{c}"' for c in fk["columns"])
         ref_col_list = ', '.join(f'"{c}"' for c in fk["referenced_columns"])
         lines.append(
-            f'FOREIGN KEY ({col_list}) REFERENCES "{fk["referenced_table"]}" ({ref_col_list})'
+            f'FOREIGN KEY ({col_list}) REFERENCES {fk["referenced_table"]} ({ref_col_list})'
         )
     columns_sql = ',\n  '.join(lines)
-    return f'CREATE TABLE "{table_name}" (\n  {columns_sql}\n);'
+    return f'CREATE TABLE {table_ident} (\n  {columns_sql}\n);'
 
 
 def get_add_column_sql(table_name, col_name, col):
-    line = f'ALTER TABLE "{table_name}" ADD COLUMN "{col_name}" {col["data_type"]}'
-    if col.get("character_maximum_length"):
-        line += f'({col["character_maximum_length"]})'
-    if col.get("numeric_precision") and col.get("numeric_scale") is not None:
-        line += f'({col["numeric_precision"]},{col["numeric_scale"]})'
+    if '.' in table_name:
+        schema, tbl = table_name.split('.', 1)
+        table_ident = f'{schema}."{tbl}"'
+    else:
+        table_ident = f'"{table_name}"'
+    coltype = col["data_type"]
+    if coltype in ("integer", "bigint", "smallint"):
+        typstr = coltype
+    elif col.get("numeric_precision") and col.get("numeric_scale") is not None:
+        typstr = f'numeric({col["numeric_precision"]},{col["numeric_scale"]})'
+    elif col.get("character_maximum_length"):
+        typstr = f'{coltype}({col["character_maximum_length"]})'
+    else:
+        typstr = coltype
+    line = f'ALTER TABLE {table_ident} ADD COLUMN "{col_name}" {typstr}'
     if col["is_nullable"] == "NO":
         line += " NOT NULL"
     if col.get("column_default"):
@@ -821,29 +856,43 @@ def get_add_column_sql(table_name, col_name, col):
 
 
 def get_create_index_sql(index_name, index_info, table_name):
+    if '.' in table_name:
+        schema, tbl = table_name.split('.', 1)
+        table_ident = f'{schema}."{tbl}"'
+    else:
+        table_ident = f'"{table_name}"'
     unique = "UNIQUE " if index_info.get("is_unique") else ""
     cols = ', '.join(f'"{c}"' for c in index_info["columns"])
-    return f'CREATE {unique}INDEX "{index_name}" ON "{table_name}" ({cols});'
+    return f'CREATE {unique}INDEX "{index_name}" ON {table_ident} ({cols});'
 
 
 def get_add_fk_sql(table_name, fk):
+    if '.' in table_name:
+        schema, tbl = table_name.split('.', 1)
+        table_ident = f'{schema}."{tbl}"'
+    else:
+        table_ident = f'"{table_name}"'
     col_list = ', '.join(f'"{c}"' for c in fk["columns"])
     ref_col_list = ', '.join(f'"{c}"' for c in fk["referenced_columns"])
     return (
-        f'ALTER TABLE "{table_name}" ADD CONSTRAINT "{fk["constraint_name"]}" '
-        f'FOREIGN KEY ({col_list}) REFERENCES "{fk["referenced_table"]}" ({ref_col_list});'
+        f'ALTER TABLE {table_ident} ADD CONSTRAINT "{fk["constraint_name"]}" '
+        f'FOREIGN KEY ({col_list}) REFERENCES {fk["referenced_table"]} ({ref_col_list});'
     )
 
 
 def get_create_enum_sql(enum_name, enum_values):
+    if '.' in enum_name:
+        schema, name = enum_name.split('.', 1)
+        enum_ident = f'{schema}."{name}"'
+    else:
+        enum_ident = f'"{enum_name}"'
     vals = ', '.join(f"'{v}'" for v in enum_values)
-    return f'CREATE TYPE "{enum_name}" AS ENUM ({vals});'
+    return f'CREATE TYPE {enum_ident} AS ENUM ({vals});'
 
 
 def get_table_info(schema, table_name):
     """Return the full table info for table_name from given schema dict."""
     return schema['tables'].get(table_name, {})
-
 
 def get_column_info(schema, table_name, col_name):
     """Return the column definition for col_name in table_name from schema dict."""
